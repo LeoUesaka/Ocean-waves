@@ -1,0 +1,507 @@
+#pragma rtGlobals=1	
+
+////////////////////////////////////////////////////////////
+///////////////////////いろいろ使えるコマンド//////////////////////
+///////////////////////////////////////////////////////////
+
+//2方向のドップラー速度から速度の絶対値を求める
+function DPspeed()
+	wave s2east,s2north,s2east2,s2north2
+	duplicate/O s2north DPspd
+	DPspd = sqrt((s2east)^2 + (s2north)^2)
+	if(waveexists(s2east2)==1)	
+		duplicate/O s2north2 DPspd2
+		DPspd2 = sqrt((s2east2)^2 + (s2north2)^2)
+	endif
+end
+
+
+//方向の平均値を求める(in:deg out:deg)
+function circular_mean(thewave)
+	wave thewave
+	variable xvalue = 0
+	variable yvalue = 0
+	variable i = 0
+	variable the_mean
+	do
+		xvalue += cos(thewave[i]*pi/180)
+		yvalue += sin(thewave[i]*pi/180)	
+		i += 1
+	while(i<numpnts(thewave))
+	
+	the_mean = atan2(yvalue,xvalue)*180/pi
+	
+	if(the_mean<0)
+		the_mean += 360
+	endif
+	return the_mean
+end
+
+//速度の絶対値の変化を移動平均する
+function spdavg()
+	wave DPspd, DPspd2
+	variable i = 0
+	variable range = 20 //mooving avrage window
+	duplicate/O DPspd DPspd_avg
+	do
+		DPspd_avg[i] = sum(DPspd,pnt2x(DPspd,i),pnt2x(DPspd,i+range))/range
+		i += 1
+	while(i<numpnts(DPspd)-range)
+	if(waveexists(DPspd2)==1)
+		duplicate/O DPspd2 DPspd_avg2
+		i = 0
+		do
+			DPspd_avg2[i] = sum(DPspd2,pnt2x(DPspd2,i),pnt2x(DPspd2,i+range))/range
+			i += 1
+		while(i<numpnts(DPspd2)-range)
+	endif
+	
+end
+
+//axの分散を計算する
+function axvar(axwave)
+	wave axwave
+	variable i = 0
+	variable range = 60
+	duplicate/O axwave ax_vari
+	do
+		ax_vari[i] = variance(axwave,pnt2x(axwave,i),pnt2x(axwave,i+range))
+		i += 1
+	while(i<numpnts(axwave)-range)
+end
+
+
+//waveの最後に値をひとつ追加
+Function AppendValue(thewave, thevalue)
+    Wave thewave
+    Variable thevalue
+    Redimension/D/N=(numpnts(thewave)+1) thewave
+    thewave [numpnts(thewave)] = thevalue
+End
+
+//Ninja2台装着したワタリアホウドリ用　ロードしたwave全ての名前の後に2をつける
+function name2()
+	wave accuracyH, accuracyV, alt, ax, ay, az, lat, long, mx, my, mz, pr
+	wave s2down, s2east, s2north, temp, vx, vy, vz
+	variable i = 0
+	string waves = WaveList("*",";","")
+	string thewavename
+	do
+		thewavename = StringFromList(i, waves)
+		wave thewave = $(thewavename)
+		rename thewave $(thewavename+"2")
+		i += 1
+	while(i<ItemsInList(waves))
+end
+
+//Ninja2台装着したワタリアホウドリ用　ロードしたwave全ての名前の後ろから2をとる
+function name_delete_2()
+	wave accuracyH2, accuracyV2, alt2, ax2, ay2, az2, lat2, long2, mx2, my2, mz2, pr2
+	wave s2down2, s2east2, s2north2, temp2, vx2, vy2, vz2
+	variable i = 0
+	string waves = WaveList("*",";","")
+	string thewavename
+	do
+		thewavename = StringFromList(i, waves)
+		wave thewave = $(thewavename)
+		rename thewave $(RemoveEnding(thewavename))
+		i += 1
+	while(i<ItemsInList(waves))
+end
+
+
+
+////////////////////////////////////////////////////////////
+///////////////////////波浪観測系/////////////////////////
+///////////////////////////////////////////////////////////
+
+
+//波浪パラメータの計算(pythonから移植して書き換えた)
+function calc_ocean_wave_para(vartical_motion, x_velocity, y_velocity)
+	wave vartical_motion
+	wave x_velocity
+	wave y_velocity
+	
+	duplicate/O vartical_motion zwave
+	duplicate/O x_velocity xvelo
+	duplicate/O y_velocity yvelo
+	
+	zwave = zwave - mean(zwave)
+	xvelo = xvelo - mean(xvelo)
+	yvelo = yvelo - mean(yvelo)
+	
+	variable height
+	variable period
+	variable direction
+	
+	
+   make/O/N=0 height_list
+   make/O/N=0 period_list
+   make/O/N=0 direction_list
+   make/O/N=1 points = {0}
+   
+   
+   variable i = 1
+   variable x1 = 0
+   
+	do
+		if(zwave[i-1] < 0 && zwave[i] >= 0)
+			height = wavemax(zwave,pnt2x(zwave,x1),pnt2x(zwave,i)) - wavemin(zwave,pnt2x(zwave,x1),pnt2x(zwave,i))
+			period = (i - x1)/5
+			appendvalue(height_list,height)
+			appendvalue(period_list,period)
+			appendvalue(points,i)
+			x1 = i
+		endif
+		i += 1
+	while(i<numpnts(zwave))
+	
+	variable n = 1
+   do
+   		duplicate/O/R=[points[n-1],points[n]] zwave plusminus
+   		plusminus = plusminus/abs(plusminus)
+   		
+		duplicate/O/R=[points[n-1],points[n]] xvelo east_passage
+		duplicate/O/R=[points[n-1],points[n]] yvelo north_passage
+		
+		east_passage = east_passage * plusminus
+      north_passage = north_passage * plusminus
+      
+      direction = atan2(sum(north_passage),sum(east_passage))*180/pi
+      appendvalue(direction_list, direction)
+      
+      n += 1
+      
+   while(n<numpnts(points))
+	
+	SortColumns/R/kndx=0 sortWaves={height_list,period_list,direction_list}
+	
+	variable otp = floor(numpnts(height_list)/3) //one third point of height_list
+	
+	variable sgh = mean(height_list,0,pnt2x(height_list,otp))
+	variable sgp = mean(period_list,0,pnt2x(period_list,otp))
+	
+	duplicate/O/R=[0,otp] direction_list direction_list_top
+	
+	variable sgd_math = circular_mean(direction_list_top) //mathmatical direction, 0 deg east
+	 
+	variable sgd_climate //climatical direction, 0 deg north
+	if(sgd_math <= 90)
+		sgd_climate = 90 - sgd_math
+	else
+		sgd_climate = 450 - sgd_math
+	endif
+	
+	if(sgd_climate<=180)		//propagate toward　⇒ propagate from
+		sgd_climate = sgd_climate + 180
+	else
+		sgd_climate = sgd_climate -180
+	endif
+	
+//	print sgh, sgp, sgd_math, sgd_climate
+	
+	killwaves zwave, xvelo, yvelo
+	killwaves height_list, period_list, direction_list, direction_list_top, points
+	killwaves plusminus, east_passage, north_passage
+	
+	make/O/N=0 result
+	
+	appendvalue(result,sgh)
+	appendvalue(result,sgp)
+	appendvalue(result,sgd_math)
+	appendvalue(result,sgd_climate)
+
+end
+
+
+
+
+
+function make20mindata(birdID) //着水中の高度と水平速度を20分間で区切る
+	string birdID
+	wave alt, alt2, s2east, s2east2, s2north, s2north2
+	string year
+	string bird_spcs
+	string tags
+	variable i
+	variable calc_dur = 6000
+	variable landing_num
+	variable landing_num_num
+	variable endpoint
+	variable startpoint
+	variable landing_dur
+	string altitude = "alt"
+	string speed_to_east = "s2east"
+	string speed_to_north = "s2north"
+	string latitude = "lat"
+	string longitude = "long"
+	string dati
+	variable datinum
+	prompt year,"data year?", popup "2020;2019;2018;2017;2016;2015;2014"
+	prompt bird_spcs,"bird species?", popup "streakedshearwater;wanderingalbatross;europeanshag"
+	prompt tags,"Ninja or Ninja_watari?", popup "Ninja;Ninja_watari"
+	DoPrompt "data",year,bird_spcs,tags
+	string load_option = "F=-2,N=starttime_list; F=-2,N=endtime_list; F=0,N=startpoint_list; F=0,N=endpoint_list; F=0,N=landing_dur_list;"
+	string landing_data_pass = "C:\\Users\\butte\\Desktop\\datas\\" + year + "_" + bird_spcs + "\\" + tags + "\\" + birdID + "\\"  + birdID + "_landing.csv"
+	LoadWave/O/A/J/B=load_option landing_data_pass
+	wave startpoint_list, landing_dur_list
+	make/O/N=0 landing_num_list
+	make/O/N=0 landing_num_num_list
+	for(i=0; i<numpnts(startpoint_list); i+=1)
+		landing_num = i+1
+		landing_num_num =1
+		startpoint = startpoint_list[i]
+		landing_dur = landing_dur_list[i]
+		endpoint = startpoint+calc_dur
+		if(i!=0)
+			if(startpoint_list[i-1]>startpoint_list[i])
+				altitude = "alt2"
+				speed_to_east = "s2east2"
+				speed_to_north = "s2north2"
+				latitude = "lat2"
+				longitude = "long2"
+			endif
+		endif
+		do
+			string landingID = birdID + "_" + num2str(landing_num) + "_" + num2str(landing_num_num)
+			string twenty_alt = "alt" + landingID
+			string twenty_alt_filt = twenty_alt+ "_filt"
+			string twenty_s2north = "s2north" + landingID
+			string twenty_s2east = "s2east" + landingID
+			
+			duplicate/O/R=[startpoint,endpoint] $(altitude) $(twenty_alt)
+			duplicate/O/R=[startpoint,endpoint] $(speed_to_east) $(twenty_s2east)
+			duplicate/O/R=[startpoint,endpoint] $(speed_to_north) $(twenty_s2north)
+			Duplicate/O $(twenty_alt), $(twenty_alt_filt); DelayUpdate
+			FilterFIR/DIM=0/HI={0.012,0.016,2000}$(twenty_alt_filt)
+			
+			dati = Secs2Date(leftx($(twenty_alt_filt)),0) + Secs2time(leftx($(twenty_alt_filt)),2)
+			datinum = str2num(dati[0,3] + dati[5,6] + dati[8,9] + dati[10,11] + dati[13,14])
+			AppendValue($(twenty_alt_filt), datinum)
+			
+			wave lonwave = $(longitude)
+			wave latwave = $(latitude)
+			
+			AppendValue($(twenty_s2east), Lonwave[startpoint])
+			AppendValue($(twenty_s2north), Latwave[startpoint])
+			
+			AppendValue(landing_num_list, landing_num)
+			AppendValue(landing_num_num_list, landing_num_num)
+			
+			landing_num_num += 1
+			startpoint = endpoint
+			endpoint = startpoint+calc_dur
+		while (landing_num_num*20 <= landing_dur)
+	endfor
+end
+
+function savebirdCSV(birdID)
+	string birdID
+	string filename = birdID + ".csv"
+	string datalist = wavelist("alt"+birdID+"*filt",";","")
+	datalist += wavelist("S2north"+birdID+"*",";","")
+	datalist += wavelist("S2east"+birdID+"*",";","")
+	Save/B/J/M="\r\n"/DLIM=","/W/F datalist as filename
+end
+
+function loadbirdCSV(birdID)
+	string birdID
+	string year
+	string bird_spcs
+	string tags
+	string load_option = "F=-2,N=starttime_list; F=-2,N=endtime_list; F=0,N=startpoint_list; F=0,N=endpoint_list; F=0,N=landing_dur_list;"
+	string landing_data_pass = "C:\\Users\\butte\\Desktop\\datas\\" + year + "_" + bird_spcs + "\\" + tags + "\\" + birdID + "\\"  + birdID + "_landing.csv"
+	LoadWave/A/J/B=load_option landing_data_pass
+end
+
+function VeDBAavg()
+	variable range = 200
+	variable i = range/2
+	duplicate/O VeDBA VeDBA_avg
+	do
+		VeDBA_avg[i] = sum(VeDBA,pnt2x(VeDBA,i-range/2),pnt2x(VeDBA,i+range/2))/range
+		i += 1
+	while(i<numpnts(VeDBA)-range/2)
+end
+
+
+function AccAvg(birdID) //VeDBAを計算して各パッセージの平均値を求める
+	string birdID
+	wave ax, ay, az, ax2, ay2, az2, alt, alt2
+	//calcurate dinamic acceleration
+	if(waveexists(ax_stt) == 0)
+		Duplicate/O ax, ax_stt; DelayUpdate
+		FilterFIR/DIM=0/LO={0,0.002,1000}ax_stt
+		Duplicate/O ay, ay_stt; DelayUpdate
+		FilterFIR/DIM=0/LO={0,0.002,1000}ay_stt
+		Duplicate/O az, az_stt; DelayUpdate
+		FilterFIR/DIM=0/LO={0,0.002,1000}az_stt
+		Duplicate/O ax, ax_dnm; DelayUpdate
+		ax_dnm = ax - ax_stt
+		Duplicate/O ay, ay_dnm; DelayUpdate
+		ay_dnm = ay - ay_stt
+		Duplicate/O az, az_dnm; DelayUpdate
+		az_dnm = az - az_stt
+		sqrt3(ax_dnm,ay_dnm,az_dnm,"VeDBA")
+		if (waveexists(ax2) == 1)
+			Duplicate/O ax2, ax2_stt; DelayUpdate
+			FilterFIR/DIM=0/LO={0,0.002,1000}ax2_stt
+			Duplicate/O ay2, ay2_stt; DelayUpdate
+			FilterFIR/DIM=0/LO={0,0.002,1000}ay2_stt
+			Duplicate/O az2, az2_stt; DelayUpdate
+			FilterFIR/DIM=0/LO={0,0.002,1000}az2_stt
+			Duplicate/O ax2, ax2_dnm; DelayUpdate
+			ax2_dnm = ax2 - ax2_stt
+			Duplicate/O ay2, ay2_dnm; DelayUpdate
+			ay2_dnm = ay2 - ay2_stt
+			Duplicate/O az2, az2_dnm; DelayUpdate
+			az2_dnm = az2 - az2_stt
+			sqrt3(ax2_dnm,ay2_dnm,az2_dnm,"VeDBA2")
+		endif
+	endif
+	string year
+	string bird_spcs
+	string tags
+	variable i
+	variable calc_dur = 120000
+	variable landing_num
+	variable landing_num_num
+	variable endpoint
+	variable endpoint_acc
+	variable startpoint
+	variable startpoint_acc
+	variable landing_dur
+	string altitude = "alt"
+	string VectoralDBA= "VeDBA"
+	string dati
+	variable datinum
+	prompt year,"data year?", popup "2020;2019;2018;2017;2016;2015;2014"
+	prompt bird_spcs,"bird species?", popup "streakedshearwater;wanderingalbatross;europeanshag"
+	prompt tags,"Ninja or Ninja_watari?", popup "Ninja;Ninja_watari"
+	DoPrompt "data",year,bird_spcs,tags
+	string load_option = "F=-2,N=starttime_list; F=-2,N=endtime_list; F=0,N=startpoint_list; F=0,N=endpoint_list; F=0,N=landing_dur_list;"
+	string landing_data_pass = "C:\\Users\\butte\\Desktop\\datas\\" + year + "_" + bird_spcs + "\\" + tags + "\\" + birdID + "\\"  + birdID + "_landing.csv"
+	LoadWave/O/A/J/B=load_option landing_data_pass
+	wave startpoint_list, landing_dur_list
+	make/O/N=0 landing_num_list
+	make/O/N=0 landing_num_num_list
+	make/O/N=0 VeDBA_avglist
+	make/O/N=0 VeDBA_exceedlist
+	make/O/N=0 VeDBA_avglist_time
+	for(i=0; i<numpnts(startpoint_list); i+=1)
+		landing_num = i+1
+		landing_num_num =1
+		startpoint = startpoint_list[i]
+		startpoint_acc = x2pnt(ax,pnt2x(alt, startpoint))
+		landing_dur = landing_dur_list[i]
+		endpoint = startpoint_acc+calc_dur
+		if(i!=0)
+			if(startpoint_list[i-1]>startpoint_list[i])
+				altitude = "alt2"
+				VectoralDBA= "VeDBA2"
+			endif
+		endif
+		do
+			string landingID = birdID + "_" + num2str(landing_num) + "_" + num2str(landing_num_num)
+			string twenty_VectoralDBA = "VeDBA" + landingID
+			wave twenty_VeDBA = $(twenty_VectoralDBA)
+			
+			duplicate/O/R=[startpoint_acc,endpoint] $(VectoralDBA) twenty_VeDBA
+			AppendValue(VeDBA_avglist_time, leftx(twenty_VeDBA))
+			variable pnt = 0
+			variable exceed_num = 0
+			do
+				if(twenty_VeDBA[pnt]>6)
+					exceed_num += 1					
+				endif
+				pnt += 1
+			while(pnt<numpnts(twenty_VeDBA))
+			
+			wavestats/Q twenty_VeDBA
+			AppendValue(VeDBA_avglist, V_avg)
+			AppendValue(VeDBA_exceedlist, exceed_num)
+			
+			AppendValue(landing_num_list, landing_num)
+			AppendValue(landing_num_num_list, landing_num_num)
+			
+			killwaves twenty_VeDBA
+			
+			landing_num_num += 1
+			startpoint_acc = endpoint
+			
+			endpoint = startpoint_acc+calc_dur
+		while (landing_num_num*20 <= landing_dur)
+	endfor
+string filename = birdID + "_accvalue.csv"
+string datalist = wavelist("VeDBA_*",";","")
+Save/B/J/M="\r\n"/DLIM=","/W/F datalist as filename
+end
+
+function bird_acc_map()
+	wave DPspd, VeDBA, VeDBA_exceedlist, VeDBA_avglist_time, DPspd2, VeDBA2
+	Display VeDBA,DPspd
+	ModifyGraph rgb(DPspd)=(65535,43690,0)
+	if(waveexists(VeDBA2) == 1)
+		AppendToGraph VeDBA2,DPspd2
+		ModifyGraph rgb(DPspd2)=(65535,43690,0)
+	endif	
+	AppendToGraph/L=newaxis VeDBA_exceedlist vs VeDBA_avglist_time
+	ModifyGraph mode(VeDBA_exceedlist)=3,marker(VeDBA_exceedlist)=19,rgb(VeDBA_exceedlist)=(1,4,52428)
+end
+
+
+
+//ゼロアップダウンクロスでゼロ交点を求める(没)
+//function zerocross(vartical_motion)
+//	wave vartical_motion
+//	variable zwave_length = numpnts(vartical_motion)
+//	
+//	duplicate/O vartical_motion zwave
+//	zwave = zwave - mean(zwave)
+//	
+//	Interpolate2/T=1/N=(zwave_length*10) /Y=zwave_L zwave
+//	
+//	duplicate/O zwave zwave_smth
+//	Smooth 5, zwave_smth
+//	Interpolate2/T=1/N=(zwave_length*10) /Y=zwave_smth_L zwave_smth
+//	
+//	variable height
+//	variable pnt_period
+//	
+//   make/O/N=0 height_list
+//   make/O/N=0 period_list
+//   make/O/N=1 points = {0}
+//   
+//   duplicate/O zwave_smth_L crosspnt
+//   crosspnt = 0
+//   
+//   
+//   variable i = 1
+//   variable x1 = 0
+//   
+//	do
+//		if(zwave_smth_L[i-1]*zwave_smth_L[i] <= 0)
+//			height = wavemax(zwave_L,pnt2x(zwave_L,x1),pnt2x(zwave_L,i)) - wavemin(zwave_L,pnt2x(zwave_L,x1),pnt2x(zwave_L,i))
+//			pnt_period = (i - x1)
+//			appendvalue(height_list,height)
+//			appendvalue(period_list,pnt_period)
+//			appendvalue(points,i)
+//			crosspnt [i] = 1
+//			x1 = i
+//		endif
+//		i += 1
+//	while(i<numpnts(zwave_smth_L))
+//	
+//	variable takeoff_end
+//	
+////	heightが急激に下がる所、かつperiodがなだらかだったのが終わる所を探す 
+//	i = 0
+//	
+////	do
+////		
+////	while
+//	
+//	killwaves zwave, zwave_L, zwave_smth, zwave_smth_L
+//end
+
+
