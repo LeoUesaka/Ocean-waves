@@ -1,10 +1,6 @@
 #pragma rtGlobals=1	
 
-////////////////////////////////////////////////////////////
-///////////////////////いろいろ使えるコマンド//////////////////////
-///////////////////////////////////////////////////////////
-
-//2方向のドップラー速度から速度の絶対値を求める
+//calculate horizontal dopplar speed
 function DPspeed()
 	wave s2east,s2north,s2east2,s2north2
 	duplicate/O s2north DPspd
@@ -16,7 +12,7 @@ function DPspeed()
 end
 
 
-//方向の平均値を求める(in:deg out:deg)
+//calculate circular mean (input:deg output:deg)
 function circular_mean(thewave)
 	wave thewave
 	variable xvalue = 0
@@ -37,41 +33,8 @@ function circular_mean(thewave)
 	return the_mean
 end
 
-//速度の絶対値の変化を移動平均する
-function spdavg()
-	wave DPspd, DPspd2
-	variable i = 0
-	variable range = 20 //mooving avrage window
-	duplicate/O DPspd DPspd_avg
-	do
-		DPspd_avg[i] = sum(DPspd,pnt2x(DPspd,i),pnt2x(DPspd,i+range))/range
-		i += 1
-	while(i<numpnts(DPspd)-range)
-	if(waveexists(DPspd2)==1)
-		duplicate/O DPspd2 DPspd_avg2
-		i = 0
-		do
-			DPspd_avg2[i] = sum(DPspd2,pnt2x(DPspd2,i),pnt2x(DPspd2,i+range))/range
-			i += 1
-		while(i<numpnts(DPspd2)-range)
-	endif
-	
-end
 
-//axの分散を計算する
-function axvar(axwave)
-	wave axwave
-	variable i = 0
-	variable range = 60
-	duplicate/O axwave ax_vari
-	do
-		ax_vari[i] = variance(axwave,pnt2x(axwave,i),pnt2x(axwave,i+range))
-		i += 1
-	while(i<numpnts(axwave)-range)
-end
-
-
-//waveの最後に値をひとつ追加
+//appending value to the last cell of the wave
 Function AppendValue(thewave, thevalue)
     Wave thewave
     Variable thevalue
@@ -79,44 +42,13 @@ Function AppendValue(thewave, thevalue)
     thewave [numpnts(thewave)] = thevalue
 End
 
-//Ninja2台装着したワタリアホウドリ用　ロードしたwave全ての名前の後に2をつける
-function name2()
-	wave accuracyH, accuracyV, alt, ax, ay, az, lat, long, mx, my, mz, pr
-	wave s2down, s2east, s2north, temp, vx, vy, vz
-	variable i = 0
-	string waves = WaveList("*",";","")
-	string thewavename
-	do
-		thewavename = StringFromList(i, waves)
-		wave thewave = $(thewavename)
-		rename thewave $(thewavename+"2")
-		i += 1
-	while(i<ItemsInList(waves))
-end
-
-//Ninja2台装着したワタリアホウドリ用　ロードしたwave全ての名前の後ろから2をとる
-function name_delete_2()
-	wave accuracyH2, accuracyV2, alt2, ax2, ay2, az2, lat2, long2, mx2, my2, mz2, pr2
-	wave s2down2, s2east2, s2north2, temp2, vx2, vy2, vz2
-	variable i = 0
-	string waves = WaveList("*",";","")
-	string thewavename
-	do
-		thewavename = StringFromList(i, waves)
-		wave thewave = $(thewavename)
-		rename thewave $(RemoveEnding(thewavename))
-		i += 1
-	while(i<ItemsInList(waves))
-end
-
-
 
 ////////////////////////////////////////////////////////////
 ///////////////////////波浪観測系/////////////////////////
 ///////////////////////////////////////////////////////////
 
 
-//波浪パラメータの計算(pythonから移植して書き換えた)
+//calculate wave parameters
 function calc_ocean_wave_para(vartical_motion, x_velocity, y_velocity)
 	wave vartical_motion
 	wave x_velocity
@@ -215,9 +147,7 @@ end
 
 
 
-
-
-function make20mindata(birdID) //着水中の高度と水平速度を20分間で区切る
+function make20mindata(birdID)
 	string birdID
 	wave alt, alt2, s2east, s2east2, s2north, s2north2
 	string year
@@ -295,37 +225,7 @@ function make20mindata(birdID) //着水中の高度と水平速度を20分間で
 	endfor
 end
 
-function savebirdCSV(birdID)
-	string birdID
-	string filename = birdID + ".csv"
-	string datalist = wavelist("alt"+birdID+"*filt",";","")
-	datalist += wavelist("S2north"+birdID+"*",";","")
-	datalist += wavelist("S2east"+birdID+"*",";","")
-	Save/B/J/M="\r\n"/DLIM=","/W/F datalist as filename
-end
-
-function loadbirdCSV(birdID)
-	string birdID
-	string year
-	string bird_spcs
-	string tags
-	string load_option = "F=-2,N=starttime_list; F=-2,N=endtime_list; F=0,N=startpoint_list; F=0,N=endpoint_list; F=0,N=landing_dur_list;"
-	string landing_data_pass = "C:\\Users\\butte\\Desktop\\datas\\" + year + "_" + bird_spcs + "\\" + tags + "\\" + birdID + "\\"  + birdID + "_landing.csv"
-	LoadWave/A/J/B=load_option landing_data_pass
-end
-
-function VeDBAavg()
-	variable range = 200
-	variable i = range/2
-	duplicate/O VeDBA VeDBA_avg
-	do
-		VeDBA_avg[i] = sum(VeDBA,pnt2x(VeDBA,i-range/2),pnt2x(VeDBA,i+range/2))/range
-		i += 1
-	while(i<numpnts(VeDBA)-range/2)
-end
-
-
-function AccAvg(birdID) //VeDBAを計算して各パッセージの平均値を求める
+function AccAvg(birdID) //calculate VeDBA
 	string birdID
 	wave ax, ay, az, ax2, ay2, az2, alt, alt2
 	//calcurate dinamic acceleration
@@ -436,72 +336,5 @@ string filename = birdID + "_accvalue.csv"
 string datalist = wavelist("VeDBA_*",";","")
 Save/B/J/M="\r\n"/DLIM=","/W/F datalist as filename
 end
-
-function bird_acc_map()
-	wave DPspd, VeDBA, VeDBA_exceedlist, VeDBA_avglist_time, DPspd2, VeDBA2
-	Display VeDBA,DPspd
-	ModifyGraph rgb(DPspd)=(65535,43690,0)
-	if(waveexists(VeDBA2) == 1)
-		AppendToGraph VeDBA2,DPspd2
-		ModifyGraph rgb(DPspd2)=(65535,43690,0)
-	endif	
-	AppendToGraph/L=newaxis VeDBA_exceedlist vs VeDBA_avglist_time
-	ModifyGraph mode(VeDBA_exceedlist)=3,marker(VeDBA_exceedlist)=19,rgb(VeDBA_exceedlist)=(1,4,52428)
-end
-
-
-
-//ゼロアップダウンクロスでゼロ交点を求める(没)
-//function zerocross(vartical_motion)
-//	wave vartical_motion
-//	variable zwave_length = numpnts(vartical_motion)
-//	
-//	duplicate/O vartical_motion zwave
-//	zwave = zwave - mean(zwave)
-//	
-//	Interpolate2/T=1/N=(zwave_length*10) /Y=zwave_L zwave
-//	
-//	duplicate/O zwave zwave_smth
-//	Smooth 5, zwave_smth
-//	Interpolate2/T=1/N=(zwave_length*10) /Y=zwave_smth_L zwave_smth
-//	
-//	variable height
-//	variable pnt_period
-//	
-//   make/O/N=0 height_list
-//   make/O/N=0 period_list
-//   make/O/N=1 points = {0}
-//   
-//   duplicate/O zwave_smth_L crosspnt
-//   crosspnt = 0
-//   
-//   
-//   variable i = 1
-//   variable x1 = 0
-//   
-//	do
-//		if(zwave_smth_L[i-1]*zwave_smth_L[i] <= 0)
-//			height = wavemax(zwave_L,pnt2x(zwave_L,x1),pnt2x(zwave_L,i)) - wavemin(zwave_L,pnt2x(zwave_L,x1),pnt2x(zwave_L,i))
-//			pnt_period = (i - x1)
-//			appendvalue(height_list,height)
-//			appendvalue(period_list,pnt_period)
-//			appendvalue(points,i)
-//			crosspnt [i] = 1
-//			x1 = i
-//		endif
-//		i += 1
-//	while(i<numpnts(zwave_smth_L))
-//	
-//	variable takeoff_end
-//	
-////	heightが急激に下がる所、かつperiodがなだらかだったのが終わる所を探す 
-//	i = 0
-//	
-////	do
-////		
-////	while
-//	
-//	killwaves zwave, zwave_L, zwave_smth, zwave_smth_L
-//end
 
 
